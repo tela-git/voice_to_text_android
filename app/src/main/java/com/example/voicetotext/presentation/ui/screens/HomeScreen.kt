@@ -1,9 +1,16 @@
 package com.example.voicetotext.presentation.ui.screens
 
-import androidx.compose.foundation.clickable
+import android.annotation.SuppressLint
+import android.app.Application
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -12,23 +19,28 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import com.example.voicetotext.R
+import com.example.voicetotext.data.VoiceToTextParser
 
 const val homePage = "HOMEPAGE"
 const val voiceScreen = "VOICESCREEN"
@@ -46,7 +58,9 @@ fun HomeScreen(
             }
         )
         voiceScreen -> VoiceScreen(
-
+            onNavigateUp = {
+                currentScreen = homePage
+            }
         )
     }
 }
@@ -57,7 +71,7 @@ fun HomePage(
 ) {
     Scaffold(
 
-    ){innerPadding->
+    ){ innerPadding->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -109,7 +123,77 @@ fun HomePage(
     }
 }
 
+@SuppressLint("UnusedContentLambdaTargetStateParameter")
 @Composable
-fun VoiceScreen() {
+fun VoiceScreen(
+    onNavigateUp: () -> Unit
+) {
+    val context = LocalContext.current
+    val speechToTextParser by lazy {
+        VoiceToTextParser(context)
+    }
+    val uiState by speechToTextParser.state.collectAsState()
 
+    var canRecord by remember { mutableStateOf(false) }
+    val recordAudioLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            canRecord = isGranted
+        }
+    )
+
+    LaunchedEffect(recordAudioLauncher) {
+        recordAudioLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+    }
+
+    BackHandler { onNavigateUp() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            contentAlignment = Alignment.Center
+        ) {
+            IconButton(
+                onClick = {
+                    if(uiState.isListening) {
+                        speechToTextParser.stopListening()
+                    } else {
+                        speechToTextParser.startListening()
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = ImageVector.vectorResource(R.drawable.mic_red),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(30.dp),
+                    tint = Color(0xFF000000)
+                )
+            }
+            AnimatedContent(uiState.isListening) {
+                if(uiState.isListening) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(50.dp),
+                        color = Color(0xFFED1010)
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        AnimatedContent(
+            targetState = uiState.isListening,
+        ) {
+            Text(
+                text = if (uiState.isListening) "listening..." else uiState.listenedText
+            )
+        }
+        Text(
+            text = uiState.listenedText
+        )
+    }
 }
